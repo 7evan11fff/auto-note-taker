@@ -1,33 +1,51 @@
-# Auto Note-Taker
+# Auto Note-Taker (Chrome Extension, Manifest V3)
 
-Chrome extension that automatically detects videos on any website and takes real-time notes using OpenAI.
+Auto Note-Taker detects HTML5 videos on any website and generates timestamped real-time notes using OpenAI Whisper + GPT-4.
 
 ## Features
 
-- 🎥 **Universal Video Detection** - Works on YouTube, Vimeo, embedded videos, and any HTML5 video
-- 📝 **Real-Time Notes** - Notes sync with video playback so you know exactly what part each note references
-- 🤖 **AI-Powered** - Uses OpenAI GPT-4 for intelligent summarization
-- ⏱️ **Timestamped** - Each note includes the video timestamp for easy reference
-- 🎯 **Non-Intrusive** - Small popup asks if you want to take notes, stays out of your way
+- **Universal video detection** for HTML5 players (YouTube, Vimeo, embeds, etc.)
+- **In-page prompt badge** that asks whether to start AI notes
+- **Whisper transcription** on rolling audio chunks captured from the active video
+- **GPT-4 note generation** for each chunk as the video plays
+- **Timestamped notes** aligned to playback position
+- **Live side panel UI** that updates in real time
+- **API key stored in Chrome extension storage** (`chrome.storage.local`)
+- **Clean modern interface** for both the notes panel and settings popup
+
+## Project Structure
+
+- `manifest.json` - Manifest V3 configuration
+- `background.js` - Service worker; OpenAI API orchestration (Whisper + GPT)
+- `contentScript.js` - Video detection, audio capture, queue, and in-page panel
+- `contentStyles.css` - Prompt/panel styling
+- `popup.html`, `popup.css`, `popup.js` - API key + model settings UI
 
 ## Setup
 
-1. Clone this repo
-2. Go to `chrome://extensions/`
-3. Enable "Developer mode"
-4. Click "Load unpacked" and select this folder
-5. Click the extension icon and enter your OpenAI API key
+1. Clone the repository.
+2. Open `chrome://extensions`.
+3. Enable **Developer mode**.
+4. Click **Load unpacked** and select this folder.
+5. Click the extension icon.
+6. Enter your OpenAI API key and save.
+7. Open any page with a video and click **Start notes** when prompted.
 
 ## How It Works
 
-1. Browse to any page with a video
-2. A small popup appears asking if you want to take notes
-3. Click "Yes" to start
-4. Notes appear in real-time as you watch
-5. Each note shows the timestamp it references
+1. Content script continuously detects visible `<video>` elements.
+2. When a valid video is found, it shows a small prompt.
+3. On start:
+   - The script captures video audio via `captureStream()`.
+   - Audio is split into short chunks with `MediaRecorder`.
+   - Chunks are sent to the service worker.
+4. The service worker:
+   - Sends each chunk to OpenAI Whisper for transcription.
+   - Sends transcript + context to GPT-4 for concise notes.
+5. Notes are returned and rendered in the side panel with timestamps.
 
-## Tech Stack
+## Notes and Limitations
 
-- Chrome Extension Manifest V3
-- OpenAI GPT-4 API (Whisper for transcription)
-- Vanilla JS for lightweight performance
+- This extension relies on browser support for `video.captureStream()` and `MediaRecorder`.
+- Some sites or stream types may restrict audio capture.
+- OpenAI usage incurs API cost based on your account pricing.

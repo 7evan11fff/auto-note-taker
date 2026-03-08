@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Auto Note-Taker</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <h1>Auto Note-Taker</h1>
+      <p class="subtitle">OpenAI settings for real-time video notes</p>
+
+      <form id="settings-form">
+        <label class="field">
+          <span>OpenAI API key</span>
+          <input
+            id="api-key"
+            type="password"
+            placeholder="sk-..."
+            autocomplete="off"
+            required
+          />
+        </label>
+
+        <label class="field">
+          <span>GPT model</span>
+          <input id="gpt-model" type="text" value="gpt-4o" />
+        </label>
+
+        <label class="field">
+          <span>Whisper model</span>
+          <input id="whisper-model" type="text" value="whisper-1" />
+        </label>
+
+        <div class="actions">
+          <button type="submit" class="btn btn-primary">Save settings</button>
+          <button type="button" id="clear-key" class="btn btn-ghost">Clear key</button>
+        </div>
+      </form>
+
+      <p class="hint">
+        Your API key is stored in Chrome extension storage on this browser profile only.
+      </p>
+      <p id="status" class="status"></p>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,91 @@
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  width: 340px;
+  background: #0d111b;
+  color: #eef1ff;
+  font-family: Inter, Segoe UI, Arial, sans-serif;
+}
+
+.popup {
+  padding: 16px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.subtitle {
+  margin: 6px 0 14px 0;
+  font-size: 12px;
+  color: #b5c0f5;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.field span {
+  font-size: 12px;
+  color: #d2dbff;
+}
+
+input {
+  border: 1px solid rgba(137, 150, 255, 0.3);
+  background: #141a2a;
+  color: #f2f5ff;
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 13px;
+}
+
+input:focus {
+  outline: 2px solid rgba(127, 144, 255, 0.35);
+  outline-offset: 1px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.btn {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #5a67ff, #7f4dff);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.btn-ghost {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e8edff;
+}
+
+.hint {
+  margin-top: 12px;
+  font-size: 11px;
+  color: #9eaada;
+  line-height: 1.4;
+}
+
+.status {
+  margin-top: 8px;
+  min-height: 16px;
+  font-size: 12px;
+  color: #96a9ff;
+}

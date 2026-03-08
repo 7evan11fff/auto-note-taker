@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Auto Note-Taker",
+  "description": "Detects videos on any website and generates timestamped real-time notes using OpenAI.",
+  "version": "1.0.0",
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "https://api.openai.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Auto Note-Taker",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "contentScript.js"
+      ],
+      "css": [
+        "contentStyles.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
