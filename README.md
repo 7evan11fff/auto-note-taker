@@ -11,6 +11,10 @@ Auto Note-Taker detects HTML5 videos on any website and generates timestamped re
 - **Timestamped notes** aligned to playback position
 - **Live side panel UI** that updates in real time
 - **Minimizable + draggable notes panel** so it stays out of the way
+- **Explicit Stop Transcribing button** for ending sessions cleanly
+- **Automatic note persistence** to `chrome.storage.local` across refreshes
+- **Markdown export** with video/page metadata and timestamps
+- **Saved session history in popup** with one-click export
 - **API key stored in Chrome extension storage** (`chrome.storage.local`)
 - **Clean modern interface** for both the notes panel and settings popup
 

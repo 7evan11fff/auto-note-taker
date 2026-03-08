@@ -2,6 +2,8 @@
   const CHUNK_DURATION_MS = 12000;
   const MIN_CHUNK_BYTES = 1500;
   const DETECTION_INTERVAL_MS = 2000;
+  const STORAGE_SESSIONS_KEY = "savedNoteSessions";
+  const MAX_STORED_SESSIONS = 75;
 
   const state = {
     activeVideo: null,
@@ -23,7 +25,9 @@
     isPanelMinimized: false,
     capturedStream: null,
     audioStream: null,
-    segmentTimerId: null
+    segmentTimerId: null,
+    sessionRecord: null,
+    stopButtonEl: null
   };
 
   init();
@@ -144,9 +148,11 @@
     state.isSessionRunning = true;
     state.chunkQueue = [];
     state.notes = [];
+    state.sessionRecord = null;
     state.shouldPromptAgain = false;
 
     removePrompt();
+    await startSessionPersistence();
     buildPanel();
     bindVideoStateListeners(state.activeVideo);
 
@@ -154,7 +160,7 @@
       await setupRecorder(state.activeVideo);
       setStatus("Listening to video audio...");
     } catch (error) {
-      stopSession();
+      await closeSessionPanel("error");
       showInlineError(error.message || "Unable to access video audio.");
     }
   }
@@ -196,10 +202,14 @@
         </div>
         <div class="auto-note-panel__controls">
           <button class="auto-note-panel__close" data-action="minimize" aria-label="Minimize" title="Minimize">─</button>
-          <button class="auto-note-panel__close" data-action="stop" aria-label="Stop notes" title="Close">✕</button>
+          <button class="auto-note-panel__close" data-action="close" aria-label="Close notes panel" title="Close panel">✕</button>
         </div>
       </div>
       <div class="auto-note-panel__body">
+        <div class="auto-note-panel__actions">
+          <button class="auto-note-btn auto-note-btn--danger auto-note-panel__action-btn" data-action="stop-transcribing">Stop Transcribing</button>
+          <button class="auto-note-btn auto-note-btn--ghost auto-note-panel__action-btn" data-action="export-notes">Export Notes</button>
+        </div>
         <div class="auto-note-panel__status" id="auto-note-status">Starting...</div>
         <div class="auto-note-panel__notes" id="auto-note-notes">
           <div class="auto-note-panel__empty">Notes will appear here as you watch.</div>
@@ -223,8 +233,18 @@
         return;
       }
 
-      if (target.dataset.action === "stop") {
-        stopSession();
+      if (target.dataset.action === "close") {
+        void closeSessionPanel("closed");
+        return;
+      }
+
+      if (target.dataset.action === "stop-transcribing") {
+        void stopTranscriptionSession("stopped");
+        return;
+      }
+
+      if (target.dataset.action === "export-notes") {
+        exportNotes();
         return;
       }
 
@@ -243,11 +263,13 @@
     state.notesContainerEl = panelEl.querySelector("#auto-note-notes");
     state.statusEl = panelEl.querySelector("#auto-note-status");
     state.emptyStateEl = panelEl.querySelector(".auto-note-panel__empty");
+    state.stopButtonEl = panelEl.querySelector('[data-action="stop-transcribing"]');
     const minimizeButton = panelEl.querySelector('[data-action="minimize"]');
     if (minimizeButton instanceof HTMLElement && state.isPanelMinimized) {
       minimizeButton.textContent = "□";
       minimizeButton.title = "Expand";
     }
+    syncSessionButtons();
   }
 
   function teardownPanel() {
@@ -262,6 +284,7 @@
     state.notesContainerEl = null;
     state.statusEl = null;
     state.emptyStateEl = null;
+    state.stopButtonEl = null;
   }
 
   async function setupRecorder(video) {
@@ -438,6 +461,9 @@
         if (!response?.ok) {
           throw new Error(response?.error || "Unknown processing error.");
         }
+        if (!state.isSessionRunning) {
+          break;
+        }
 
         if (response.note?.text) {
           const note = {
@@ -447,6 +473,7 @@
           };
           state.notes.push(note);
           appendNote(note);
+          void persistSessionSnapshot(state.isSessionRunning ? "running" : "stopped");
           setStatus("Listening to video audio...");
         } else {
           setStatus("No speech detected in this chunk.");
@@ -498,7 +525,11 @@
     }
   }
 
-  function stopSession() {
+  async function stopTranscriptionSession(status = "stopped") {
+    if (!state.isSessionRunning && !state.recorder) {
+      return;
+    }
+
     state.isSessionRunning = false;
     state.chunkQueue = [];
     clearSegmentTimer();
@@ -522,8 +553,16 @@
       unbindVideoStateListeners(state.activeVideo);
     }
 
+    await persistSessionSnapshot(status);
+    setStatus("Transcription stopped. Notes were saved.");
+    syncSessionButtons();
+  }
+
+  async function closeSessionPanel(status = "stopped") {
+    await stopTranscriptionSession(status);
     teardownPanel();
     state.sessionId = null;
+    state.sessionRecord = null;
     state.notes = [];
     state.shouldPromptAgain = true;
 
@@ -688,6 +727,143 @@
 
     headerEl.addEventListener("pointerup", releaseDragState, { signal: abortController.signal });
     headerEl.addEventListener("pointercancel", releaseDragState, { signal: abortController.signal });
+  }
+
+  function syncSessionButtons() {
+    if (!(state.stopButtonEl instanceof HTMLButtonElement)) {
+      return;
+    }
+    state.stopButtonEl.disabled = !state.isSessionRunning;
+    state.stopButtonEl.textContent = state.isSessionRunning
+      ? "Stop Transcribing"
+      : "Transcription Stopped";
+  }
+
+  async function startSessionPersistence() {
+    const nowIso = new Date().toISOString();
+    const session = {
+      id: state.sessionId,
+      pageUrl: window.location.href,
+      pageTitle: document.title || "Untitled page",
+      videoUrl: getVideoSource(state.activeVideo) || window.location.href,
+      startedAt: nowIso,
+      updatedAt: nowIso,
+      endedAt: null,
+      status: "running",
+      notes: []
+    };
+    state.sessionRecord = session;
+    await upsertStoredSession(session);
+  }
+
+  async function persistSessionSnapshot(status = "running") {
+    if (!state.sessionRecord || !state.sessionRecord.id) {
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const persisted = {
+      ...state.sessionRecord,
+      notes: state.notes.map((note) => ({ ...note })),
+      status,
+      updatedAt: nowIso,
+      endedAt: status === "running" ? null : state.sessionRecord.endedAt || nowIso
+    };
+    state.sessionRecord = persisted;
+    await upsertStoredSession(persisted);
+  }
+
+  async function upsertStoredSession(session) {
+    try {
+      const existing = await chrome.storage.local.get(STORAGE_SESSIONS_KEY);
+      const sessions = Array.isArray(existing[STORAGE_SESSIONS_KEY])
+        ? [...existing[STORAGE_SESSIONS_KEY]]
+        : [];
+      const index = sessions.findIndex((item) => item?.id === session.id);
+      if (index >= 0) {
+        sessions[index] = session;
+      } else {
+        sessions.unshift(session);
+      }
+      sessions.sort((a, b) => {
+        const aTime = Date.parse(a?.updatedAt || a?.startedAt || 0);
+        const bTime = Date.parse(b?.updatedAt || b?.startedAt || 0);
+        return bTime - aTime;
+      });
+      await chrome.storage.local.set({
+        [STORAGE_SESSIONS_KEY]: sessions.slice(0, MAX_STORED_SESSIONS)
+      });
+    } catch {
+      setStatus("Could not persist notes to extension storage.");
+    }
+  }
+
+  function getVideoSource(video) {
+    if (!(video instanceof HTMLVideoElement)) {
+      return "";
+    }
+    return video.currentSrc || video.src || "";
+  }
+
+  function exportNotes() {
+    const session = state.sessionRecord
+      ? {
+          ...state.sessionRecord,
+          notes: state.notes.map((note) => ({ ...note }))
+        }
+      : null;
+    if (!session || !Array.isArray(session.notes) || !session.notes.length) {
+      setStatus("No notes yet. Keep watching to generate notes.");
+      return;
+    }
+
+    const markdown = buildExportMarkdown(session);
+    const safeTitle = String(session.pageTitle || "video-notes")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "video-notes";
+    const datePart = new Date().toISOString().slice(0, 10);
+    downloadTextFile(markdown, `${safeTitle}-${datePart}.md`);
+    setStatus("Exported notes.");
+  }
+
+  function buildExportMarkdown(session) {
+    const lines = [
+      "# Auto Note-Taker Export",
+      "",
+      `- Video Title: ${session.pageTitle || "Unknown"}`,
+      `- Video URL: ${session.videoUrl || session.pageUrl || "Unknown"}`,
+      `- Page URL: ${session.pageUrl || "Unknown"}`,
+      `- Started: ${session.startedAt || "Unknown"}`,
+      `- Ended: ${session.endedAt || session.updatedAt || "Unknown"}`,
+      "",
+      "## Timestamped Notes",
+      ""
+    ];
+
+    for (const note of session.notes) {
+      const timestamp = formatTimestamp(note.timestampSeconds);
+      const tagSuffix = Array.isArray(note.tags) && note.tags.length
+        ? ` _(tags: ${note.tags.join(", ")})_`
+        : "";
+      lines.push(`- [${timestamp}] ${note.text}${tagSuffix}`);
+    }
+
+    lines.push("");
+    return lines.join("\n");
+  }
+
+  function downloadTextFile(contents, filename) {
+    const blob = new Blob([contents], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   function escapeHtml(raw) {

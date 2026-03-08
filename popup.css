@@ -65,6 +65,11 @@ input:focus {
   cursor: pointer;
 }
 
+.btn-small {
+  padding: 6px 10px;
+  font-size: 11px;
+}
+
 .btn-primary {
   background: linear-gradient(135deg, #5a67ff, #7f4dff);
   color: #ffffff;
@@ -88,4 +93,62 @@ input:focus {
   min-height: 16px;
   font-size: 12px;
   color: #96a9ff;
+}
+
+.history {
+  margin-top: 16px;
+  border-top: 1px solid rgba(132, 147, 255, 0.2);
+  padding-top: 12px;
+}
+
+.history__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.history__header h2 {
+  margin: 0;
+  font-size: 13px;
+  color: #dfe6ff;
+}
+
+.history__list {
+  margin-top: 10px;
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history__empty {
+  margin: 0;
+  font-size: 12px;
+  color: #9eaada;
+}
+
+.history-item {
+  border: 1px solid rgba(132, 147, 255, 0.26);
+  border-radius: 10px;
+  background: #12192a;
+  padding: 10px;
+}
+
+.history-item__title {
+  margin: 0;
+  font-size: 12px;
+  color: #edf1ff;
+}
+
+.history-item__meta {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #adbae8;
+  line-height: 1.4;
+}
+
+.history-item__actions {
+  margin-top: 8px;
 }

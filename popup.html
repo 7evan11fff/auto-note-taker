@@ -43,6 +43,16 @@
         Your API key is stored in Chrome extension storage on this browser profile only.
       </p>
       <p id="status" class="status"></p>
+
+      <section class="history">
+        <div class="history__header">
+          <h2>Saved Sessions</h2>
+          <button type="button" id="refresh-history" class="btn btn-ghost btn-small">Refresh</button>
+        </div>
+        <div id="session-history" class="history__list">
+          <p class="history__empty">No saved note sessions yet.</p>
+        </div>
+      </section>
     </main>
 
     <script src="popup.js"></script>

@@ -64,6 +64,12 @@
   color: #e7ecff;
 }
 
+.auto-note-btn--danger {
+  background: rgba(255, 104, 126, 0.2);
+  color: #ffdce3;
+  border: 1px solid rgba(255, 104, 126, 0.38);
+}
+
 .auto-note-panel {
   position: fixed;
   top: 16px;
@@ -150,6 +156,24 @@
   display: flex;
   flex-direction: column;
   flex: 1;
+}
+
+.auto-note-panel__actions {
+  display: flex;
+  gap: 8px;
+  margin: 2px 16px 10px 16px;
+}
+
+.auto-note-panel__action-btn {
+  flex: 1;
+  font-size: 11px;
+  padding: 9px 8px;
+}
+
+.auto-note-panel__action-btn:disabled {
+  opacity: 0.56;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .auto-note-panel__status {
