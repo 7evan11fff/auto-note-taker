@@ -289,9 +289,10 @@
       }
 
       const audioBuffer = await data.arrayBuffer();
+      const audioData = arrayBufferToBase64(audioBuffer);
       const normalizedMimeType = normalizeWhisperMimeType(data.type || recorder.mimeType || mimeType);
       enqueueChunk({
-        audioBuffer,
+        audioData,
         mimeType: normalizedMimeType,
         fileExtension: getWhisperFileExtension(normalizedMimeType),
         timestampSeconds: video.currentTime
@@ -367,7 +368,7 @@
         const response = await sendMessage({
           type: "PROCESS_AUDIO_CHUNK",
           sessionId: state.sessionId,
-          audioBuffer: chunk.audioBuffer,
+          audioData: chunk.audioData,
           mimeType: chunk.mimeType,
           fileExtension: chunk.fileExtension,
           timestampSeconds: chunk.timestampSeconds,
@@ -526,6 +527,19 @@
       "audio/flac": "flac"
     };
     return extensionByMime[mimeType] || "webm";
+  }
+
+  function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const chunkSize = 0x8000;
+    const binaryChunks = [];
+
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binaryChunks.push(String.fromCharCode(...chunk));
+    }
+
+    return btoa(binaryChunks.join(""));
   }
 
   function setupPanelDragging(panelEl) {

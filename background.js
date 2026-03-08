@@ -48,7 +48,7 @@ async function getSettings() {
 async function processAudioChunk(message) {
   const {
     sessionId,
-    audioBuffer,
+    audioData,
     mimeType,
     fileExtension,
     timestampSeconds,
@@ -58,8 +58,8 @@ async function processAudioChunk(message) {
   if (!sessionId) {
     throw new Error("Missing sessionId.");
   }
-  if (!audioBuffer) {
-    throw new Error("Missing audioBuffer.");
+  if (!audioData) {
+    throw new Error("Missing audioData.");
   }
 
   const settings = await getSettings();
@@ -70,7 +70,7 @@ async function processAudioChunk(message) {
   const transcript = await transcribeChunk({
     apiKey: settings.openaiApiKey,
     whisperModel: settings.whisperModel,
-    audioBuffer,
+    audioData,
     mimeType: mimeType || "audio/webm",
     fileExtension: fileExtension || ""
   });
@@ -98,12 +98,12 @@ async function processAudioChunk(message) {
 async function transcribeChunk({
   apiKey,
   whisperModel,
-  audioBuffer,
+  audioData,
   mimeType,
   fileExtension
 }) {
   const normalized = normalizeWhisperFileInfo({ mimeType, fileExtension });
-  const audioBlob = new Blob([audioBuffer], { type: normalized.mimeType });
+  const audioBlob = new Blob([base64ToArrayBuffer(audioData)], { type: normalized.mimeType });
   const formData = new FormData();
   formData.append("model", whisperModel);
   formData.append("file", audioBlob, `audio-chunk.${normalized.fileExtension}`);
@@ -247,6 +247,23 @@ function safeJsonParse(value) {
     return JSON.parse(value);
   } catch {
     return {};
+  }
+}
+
+function base64ToArrayBuffer(base64) {
+  if (typeof base64 !== "string" || !base64.length) {
+    throw new Error("Missing audioData.");
+  }
+
+  try {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return bytes.buffer;
+  } catch {
+    throw new Error("Invalid base64 audio payload.");
   }
 }
 
