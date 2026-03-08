@@ -185,7 +185,10 @@
           <div class="auto-note-panel__title">Real-Time Notes</div>
           <div class="auto-note-panel__subtitle">Synced to video timestamps</div>
         </div>
-        <button class="auto-note-panel__close" data-action="stop" aria-label="Stop notes">✕</button>
+        <div class="auto-note-panel__controls">
+          <button class="auto-note-panel__close" data-action="minimize" aria-label="Minimize" title="Minimize">─</button>
+          <button class="auto-note-panel__close" data-action="stop" aria-label="Stop notes" title="Close">✕</button>
+        </div>
       </div>
       <div class="auto-note-panel__status" id="auto-note-status">Starting...</div>
       <div class="auto-note-panel__notes" id="auto-note-notes">
@@ -193,9 +196,45 @@
       </div>
     `;
 
+    // Drag functionality
+    const header = panelEl.querySelector(".auto-note-panel__header");
+    let isDragging = false;
+    let dragOffsetX = 0;
+    let dragOffsetY = 0;
+
+    header.addEventListener("mousedown", (e) => {
+      if (e.target.closest("button")) return;
+      isDragging = true;
+      const rect = panelEl.getBoundingClientRect();
+      dragOffsetX = e.clientX - rect.left;
+      dragOffsetY = e.clientY - rect.top;
+      panelEl.style.transition = "none";
+    });
+
+    document.addEventListener("mousemove", (e) => {
+      if (!isDragging) return;
+      const x = e.clientX - dragOffsetX;
+      const y = e.clientY - dragOffsetY;
+      panelEl.style.left = `${Math.max(0, x)}px`;
+      panelEl.style.top = `${Math.max(0, y)}px`;
+      panelEl.style.right = "auto";
+    });
+
+    document.addEventListener("mouseup", () => {
+      isDragging = false;
+      panelEl.style.transition = "";
+    });
+
     panelEl.addEventListener("click", (event) => {
       const target = event.target;
       if (!(target instanceof HTMLElement)) {
+        return;
+      }
+
+      if (target.dataset.action === "minimize") {
+        panelEl.classList.toggle("auto-note-panel--minimized");
+        target.textContent = panelEl.classList.contains("auto-note-panel--minimized") ? "□" : "─";
+        target.title = panelEl.classList.contains("auto-note-panel--minimized") ? "Expand" : "Minimize";
         return;
       }
 

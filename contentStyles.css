@@ -66,25 +66,53 @@
 
 .auto-note-panel {
   position: fixed;
-  top: 0;
-  right: 0;
+  top: 20px;
+  right: 20px;
   z-index: 2147483646;
-  width: min(380px, 92vw);
-  height: 100vh;
+  width: min(320px, 85vw);
+  height: min(450px, 70vh);
   display: flex;
   flex-direction: column;
   background: linear-gradient(180deg, #0f1320 0%, #121827 100%);
   color: #f1f4ff;
-  border-left: 1px solid rgba(143, 154, 255, 0.28);
-  box-shadow: -8px 0 28px rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(143, 154, 255, 0.28);
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
   font-family: Inter, Segoe UI, Arial, sans-serif;
+  resize: both;
+  overflow: hidden;
+}
+
+.auto-note-panel--minimized {
+  width: 180px !important;
+  height: 44px !important;
+  min-height: 44px;
+  resize: none;
+  overflow: hidden;
+}
+
+.auto-note-panel--minimized .auto-note-panel__status,
+.auto-note-panel--minimized .auto-note-panel__notes,
+.auto-note-panel--minimized .auto-note-panel__subtitle {
+  display: none;
 }
 
 .auto-note-panel__header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  padding: 16px 16px 8px 16px;
+  padding: 12px 12px 8px 12px;
+  cursor: grab;
+  user-select: none;
+}
+
+.auto-note-panel__header:active {
+  cursor: grabbing;
+}
+
+.auto-note-panel__controls {
+  display: flex;
+  gap: 4px;
 }
 
 .auto-note-panel__title {

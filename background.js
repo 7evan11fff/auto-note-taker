@@ -99,10 +99,23 @@ async function transcribeChunk({
   audioBuffer,
   mimeType
 }) {
-  const audioBlob = new Blob([audioBuffer], { type: mimeType });
+  // Normalize mimeType - strip codecs and map to Whisper-supported format
+  const baseMime = (mimeType || "audio/webm").split(";")[0].trim();
+  const extensionMap = {
+    "audio/webm": "webm",
+    "audio/mp4": "mp4",
+    "audio/ogg": "ogg",
+    "audio/mpeg": "mp3",
+    "audio/wav": "wav",
+    "audio/flac": "flac"
+  };
+  const extension = extensionMap[baseMime] || "webm";
+  const cleanMime = baseMime || "audio/webm";
+  
+  const audioBlob = new Blob([audioBuffer], { type: cleanMime });
   const formData = new FormData();
   formData.append("model", whisperModel);
-  formData.append("file", audioBlob, "video-audio-chunk.webm");
+  formData.append("file", audioBlob, `audio-chunk.${extension}`);
   formData.append("response_format", "json");
 
   const response = await fetch(OPENAI_TRANSCRIPTION_ENDPOINT, {
