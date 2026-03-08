@@ -50,6 +50,7 @@ async function processAudioChunk(message) {
     sessionId,
     audioBuffer,
     mimeType,
+    fileExtension,
     timestampSeconds,
     recentNotes = []
   } = message;
@@ -70,7 +71,8 @@ async function processAudioChunk(message) {
     apiKey: settings.openaiApiKey,
     whisperModel: settings.whisperModel,
     audioBuffer,
-    mimeType: mimeType || "audio/webm"
+    mimeType: mimeType || "audio/webm",
+    fileExtension: fileExtension || ""
   });
 
   if (!transcript || !transcript.trim()) {
@@ -97,25 +99,14 @@ async function transcribeChunk({
   apiKey,
   whisperModel,
   audioBuffer,
-  mimeType
+  mimeType,
+  fileExtension
 }) {
-  // Normalize mimeType - strip codecs and map to Whisper-supported format
-  const baseMime = (mimeType || "audio/webm").split(";")[0].trim();
-  const extensionMap = {
-    "audio/webm": "webm",
-    "audio/mp4": "mp4",
-    "audio/ogg": "ogg",
-    "audio/mpeg": "mp3",
-    "audio/wav": "wav",
-    "audio/flac": "flac"
-  };
-  const extension = extensionMap[baseMime] || "webm";
-  const cleanMime = baseMime || "audio/webm";
-  
-  const audioBlob = new Blob([audioBuffer], { type: cleanMime });
+  const normalized = normalizeWhisperFileInfo({ mimeType, fileExtension });
+  const audioBlob = new Blob([audioBuffer], { type: normalized.mimeType });
   const formData = new FormData();
   formData.append("model", whisperModel);
-  formData.append("file", audioBlob, `audio-chunk.${extension}`);
+  formData.append("file", audioBlob, `audio-chunk.${normalized.fileExtension}`);
   formData.append("response_format", "json");
 
   const response = await fetch(OPENAI_TRANSCRIPTION_ENDPOINT, {
@@ -133,6 +124,64 @@ async function transcribeChunk({
 
   const data = await response.json();
   return (data.text || "").trim();
+}
+
+function normalizeWhisperFileInfo({ mimeType, fileExtension }) {
+  const mimeByExtension = {
+    flac: "audio/flac",
+    m4a: "audio/mp4",
+    mp3: "audio/mpeg",
+    mp4: "audio/mp4",
+    mpeg: "audio/mpeg",
+    mpga: "audio/mpeg",
+    oga: "audio/ogg",
+    ogg: "audio/ogg",
+    wav: "audio/wav",
+    webm: "audio/webm"
+  };
+  const extensionByMime = {
+    "audio/flac": "flac",
+    "audio/mp4": "mp4",
+    "video/mp4": "mp4",
+    "audio/m4a": "m4a",
+    "audio/mpeg": "mp3",
+    "audio/mpga": "mpga",
+    "audio/ogg": "ogg",
+    "video/ogg": "ogg",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/webm": "webm",
+    "video/webm": "webm"
+  };
+
+  const normalizedExtension = String(fileExtension || "")
+    .replace(/^\./, "")
+    .trim()
+    .toLowerCase();
+  const normalizedMimeCandidate = String(mimeType || "")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
+
+  if (mimeByExtension[normalizedExtension]) {
+    return {
+      mimeType: mimeByExtension[normalizedExtension],
+      fileExtension: normalizedExtension
+    };
+  }
+
+  const mappedExtension = extensionByMime[normalizedMimeCandidate];
+  if (mappedExtension) {
+    return {
+      mimeType: mimeByExtension[mappedExtension] || "audio/webm",
+      fileExtension: mappedExtension
+    };
+  }
+
+  return {
+    mimeType: "audio/webm",
+    fileExtension: "webm"
+  };
 }
 
 async function generateRealtimeNote({

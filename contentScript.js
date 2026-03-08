@@ -17,7 +17,10 @@
     isProcessingQueue: false,
     notes: [],
     settings: null,
-    shouldPromptAgain: true
+    shouldPromptAgain: true,
+    videoListeners: null,
+    panelDragAbortController: null,
+    isPanelMinimized: false
   };
 
   init();
@@ -179,6 +182,9 @@
 
     const panelEl = document.createElement("aside");
     panelEl.className = "auto-note-panel";
+    if (state.isPanelMinimized) {
+      panelEl.classList.add("auto-note-panel--minimized");
+    }
     panelEl.innerHTML = `
       <div class="auto-note-panel__header">
         <div>
@@ -190,40 +196,15 @@
           <button class="auto-note-panel__close" data-action="stop" aria-label="Stop notes" title="Close">✕</button>
         </div>
       </div>
-      <div class="auto-note-panel__status" id="auto-note-status">Starting...</div>
-      <div class="auto-note-panel__notes" id="auto-note-notes">
-        <div class="auto-note-panel__empty">Notes will appear here as you watch.</div>
+      <div class="auto-note-panel__body">
+        <div class="auto-note-panel__status" id="auto-note-status">Starting...</div>
+        <div class="auto-note-panel__notes" id="auto-note-notes">
+          <div class="auto-note-panel__empty">Notes will appear here as you watch.</div>
+        </div>
       </div>
     `;
 
-    // Drag functionality
-    const header = panelEl.querySelector(".auto-note-panel__header");
-    let isDragging = false;
-    let dragOffsetX = 0;
-    let dragOffsetY = 0;
-
-    header.addEventListener("mousedown", (e) => {
-      if (e.target.closest("button")) return;
-      isDragging = true;
-      const rect = panelEl.getBoundingClientRect();
-      dragOffsetX = e.clientX - rect.left;
-      dragOffsetY = e.clientY - rect.top;
-      panelEl.style.transition = "none";
-    });
-
-    document.addEventListener("mousemove", (e) => {
-      if (!isDragging) return;
-      const x = e.clientX - dragOffsetX;
-      const y = e.clientY - dragOffsetY;
-      panelEl.style.left = `${Math.max(0, x)}px`;
-      panelEl.style.top = `${Math.max(0, y)}px`;
-      panelEl.style.right = "auto";
-    });
-
-    document.addEventListener("mouseup", () => {
-      isDragging = false;
-      panelEl.style.transition = "";
-    });
+    setupPanelDragging(panelEl);
 
     panelEl.addEventListener("click", (event) => {
       const target = event.target;
@@ -232,9 +213,10 @@
       }
 
       if (target.dataset.action === "minimize") {
-        panelEl.classList.toggle("auto-note-panel--minimized");
-        target.textContent = panelEl.classList.contains("auto-note-panel--minimized") ? "□" : "─";
-        target.title = panelEl.classList.contains("auto-note-panel--minimized") ? "Expand" : "Minimize";
+        state.isPanelMinimized = !panelEl.classList.contains("auto-note-panel--minimized");
+        panelEl.classList.toggle("auto-note-panel--minimized", state.isPanelMinimized);
+        target.textContent = state.isPanelMinimized ? "□" : "─";
+        target.title = state.isPanelMinimized ? "Expand" : "Minimize";
         return;
       }
 
@@ -258,9 +240,18 @@
     state.notesContainerEl = panelEl.querySelector("#auto-note-notes");
     state.statusEl = panelEl.querySelector("#auto-note-status");
     state.emptyStateEl = panelEl.querySelector(".auto-note-panel__empty");
+    const minimizeButton = panelEl.querySelector('[data-action="minimize"]');
+    if (minimizeButton instanceof HTMLElement && state.isPanelMinimized) {
+      minimizeButton.textContent = "□";
+      minimizeButton.title = "Expand";
+    }
   }
 
   function teardownPanel() {
+    if (state.panelDragAbortController) {
+      state.panelDragAbortController.abort();
+      state.panelDragAbortController = null;
+    }
     if (state.panelEl) {
       state.panelEl.remove();
     }
@@ -285,7 +276,7 @@
     }
 
     const audioOnlyStream = new MediaStream(audioTracks);
-    const mimeType = getSupportedMimeType();
+    const mimeType = getSupportedRecorderMimeType();
     const recorder = new MediaRecorder(audioOnlyStream, mimeType ? { mimeType } : undefined);
 
     recorder.ondataavailable = async (event) => {
@@ -298,9 +289,11 @@
       }
 
       const audioBuffer = await data.arrayBuffer();
+      const normalizedMimeType = normalizeWhisperMimeType(data.type || recorder.mimeType || mimeType);
       enqueueChunk({
         audioBuffer,
-        mimeType: data.type || mimeType || "audio/webm",
+        mimeType: normalizedMimeType,
+        fileExtension: getWhisperFileExtension(normalizedMimeType),
         timestampSeconds: video.currentTime
       });
     };
@@ -376,6 +369,7 @@
           sessionId: state.sessionId,
           audioBuffer: chunk.audioBuffer,
           mimeType: chunk.mimeType,
+          fileExtension: chunk.fileExtension,
           timestampSeconds: chunk.timestampSeconds,
           recentNotes: state.notes.map((note) => note.text).slice(-5)
         });
@@ -489,9 +483,119 @@
     const candidates = [
       "audio/webm;codecs=opus",
       "audio/webm",
+      "audio/ogg;codecs=opus",
+      "audio/ogg",
       "audio/mp4"
     ];
     return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || "";
+  }
+
+  function getSupportedRecorderMimeType() {
+    return getSupportedMimeType();
+  }
+
+  function normalizeWhisperMimeType(rawMimeType) {
+    const baseMimeType = String(rawMimeType || "audio/webm")
+      .split(";")[0]
+      .trim()
+      .toLowerCase();
+    const normalizedMimeMap = {
+      "audio/webm": "audio/webm",
+      "video/webm": "audio/webm",
+      "audio/ogg": "audio/ogg",
+      "video/ogg": "audio/ogg",
+      "audio/mp4": "audio/mp4",
+      "video/mp4": "audio/mp4",
+      "audio/mpeg": "audio/mpeg",
+      "audio/mpga": "audio/mpeg",
+      "audio/wav": "audio/wav",
+      "audio/x-wav": "audio/wav",
+      "audio/flac": "audio/flac",
+      "audio/m4a": "audio/mp4"
+    };
+    return normalizedMimeMap[baseMimeType] || "audio/webm";
+  }
+
+  function getWhisperFileExtension(mimeType) {
+    const extensionByMime = {
+      "audio/webm": "webm",
+      "audio/ogg": "ogg",
+      "audio/mp4": "mp4",
+      "audio/mpeg": "mp3",
+      "audio/wav": "wav",
+      "audio/flac": "flac"
+    };
+    return extensionByMime[mimeType] || "webm";
+  }
+
+  function setupPanelDragging(panelEl) {
+    const headerEl = panelEl.querySelector(".auto-note-panel__header");
+    if (!(headerEl instanceof HTMLElement)) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    state.panelDragAbortController = abortController;
+
+    let pointerId = null;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    headerEl.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (event.button !== 0) {
+          return;
+        }
+        const eventTarget = event.target;
+        if (eventTarget instanceof Element && eventTarget.closest("button")) {
+          return;
+        }
+
+        pointerId = event.pointerId;
+        const rect = panelEl.getBoundingClientRect();
+        offsetX = event.clientX - rect.left;
+        offsetY = event.clientY - rect.top;
+        panelEl.style.left = `${rect.left}px`;
+        panelEl.style.top = `${rect.top}px`;
+        panelEl.style.right = "auto";
+        panelEl.style.bottom = "auto";
+        headerEl.setPointerCapture(pointerId);
+      },
+      { signal: abortController.signal }
+    );
+
+    headerEl.addEventListener(
+      "pointermove",
+      (event) => {
+        if (event.pointerId !== pointerId) {
+          return;
+        }
+
+        const panelRect = panelEl.getBoundingClientRect();
+        const maxLeft = Math.max(0, window.innerWidth - panelRect.width);
+        const maxTop = Math.max(0, window.innerHeight - panelRect.height);
+        const nextLeft = Math.min(maxLeft, Math.max(0, event.clientX - offsetX));
+        const nextTop = Math.min(maxTop, Math.max(0, event.clientY - offsetY));
+
+        panelEl.style.left = `${nextLeft}px`;
+        panelEl.style.top = `${nextTop}px`;
+      },
+      { signal: abortController.signal }
+    );
+
+    const releaseDragState = (event) => {
+      if (event.pointerId !== pointerId) {
+        return;
+      }
+      if (headerEl.hasPointerCapture(pointerId)) {
+        headerEl.releasePointerCapture(pointerId);
+      }
+      pointerId = null;
+    };
+
+    headerEl.addEventListener("pointerup", releaseDragState, { signal: abortController.signal });
+    headerEl.addEventListener("pointercancel", releaseDragState, { signal: abortController.signal });
   }
 
   function escapeHtml(raw) {
