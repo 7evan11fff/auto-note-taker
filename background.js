@@ -1,5 +1,6 @@
 const OPENAI_TRANSCRIPTION_ENDPOINT = "https://api.openai.com/v1/audio/transcriptions";
 const OPENAI_CHAT_ENDPOINT = "https://api.openai.com/v1/chat/completions";
+const MIN_TRANSCRIPTION_BYTES = 1500;
 
 const DEFAULT_SETTINGS = {
   gptModel: "gpt-4o",
@@ -103,7 +104,11 @@ async function transcribeChunk({
   fileExtension
 }) {
   const normalized = normalizeWhisperFileInfo({ mimeType, fileExtension });
-  const audioBlob = new Blob([base64ToArrayBuffer(audioData)], { type: normalized.mimeType });
+  const audioBuffer = base64ToArrayBuffer(audioData);
+  if (audioBuffer.byteLength < MIN_TRANSCRIPTION_BYTES) {
+    return "";
+  }
+  const audioBlob = new Blob([audioBuffer], { type: normalized.mimeType });
   const formData = new FormData();
   formData.append("model", whisperModel);
   formData.append("file", audioBlob, `audio-chunk.${normalized.fileExtension}`);

@@ -20,7 +20,10 @@
     shouldPromptAgain: true,
     videoListeners: null,
     panelDragAbortController: null,
-    isPanelMinimized: false
+    isPanelMinimized: false,
+    capturedStream: null,
+    audioStream: null,
+    segmentTimerId: null
   };
 
   init();
@@ -278,6 +281,8 @@
     const audioOnlyStream = new MediaStream(audioTracks);
     const mimeType = getSupportedRecorderMimeType();
     const recorder = new MediaRecorder(audioOnlyStream, mimeType ? { mimeType } : undefined);
+    state.capturedStream = capturedStream;
+    state.audioStream = audioOnlyStream;
 
     recorder.ondataavailable = async (event) => {
       if (!state.isSessionRunning) {
@@ -288,15 +293,19 @@
         return;
       }
 
-      const audioBuffer = await data.arrayBuffer();
-      const audioData = arrayBufferToBase64(audioBuffer);
-      const normalizedMimeType = normalizeWhisperMimeType(data.type || recorder.mimeType || mimeType);
-      enqueueChunk({
-        audioData,
-        mimeType: normalizedMimeType,
-        fileExtension: getWhisperFileExtension(normalizedMimeType),
-        timestampSeconds: video.currentTime
-      });
+      try {
+        const audioBuffer = await data.arrayBuffer();
+        const audioData = arrayBufferToBase64(audioBuffer);
+        const normalizedMimeType = normalizeWhisperMimeType(data.type || recorder.mimeType || mimeType);
+        enqueueChunk({
+          audioData,
+          mimeType: normalizedMimeType,
+          fileExtension: getWhisperFileExtension(normalizedMimeType),
+          timestampSeconds: video.currentTime
+        });
+      } catch {
+        setStatus("Skipped malformed audio segment.");
+      }
     };
 
     recorder.onerror = (event) => {
@@ -304,32 +313,48 @@
       setStatus(`Recorder error: ${message}`);
     };
 
-    recorder.start(CHUNK_DURATION_MS);
-
-    if (video.paused) {
-      recorder.pause();
-      setStatus("Waiting for playback...");
-    }
+    recorder.onstop = () => {
+      clearSegmentTimer();
+      if (!state.isSessionRunning || !state.activeVideo || state.activeVideo.paused || state.activeVideo.ended) {
+        return;
+      }
+      startRecorderSegment();
+    };
 
     state.recorder = recorder;
+    if (video.paused) {
+      setStatus("Waiting for playback...");
+      return;
+    }
+    startRecorderSegment();
   }
 
   function bindVideoStateListeners(video) {
     const onPlay = () => {
-      if (state.recorder?.state === "paused") {
-        state.recorder.resume();
-      }
-      setStatus("Recording audio chunk...");
+      startRecorderSegment();
     };
 
     const onPause = () => {
       if (state.recorder?.state === "recording") {
-        state.recorder.pause();
+        try {
+          state.recorder.stop();
+        } catch {
+          // Best-effort pause handling.
+        }
       }
+      clearSegmentTimer();
       setStatus("Playback paused.");
     };
 
     const onEnded = () => {
+      if (state.recorder?.state === "recording") {
+        try {
+          state.recorder.stop();
+        } catch {
+          // Best-effort shutdown.
+        }
+      }
+      clearSegmentTimer();
       setStatus("Video ended.");
     };
 
@@ -338,6 +363,41 @@
     video.addEventListener("ended", onEnded);
 
     state.videoListeners = { onPlay, onPause, onEnded };
+  }
+
+  function startRecorderSegment() {
+    if (!state.isSessionRunning || !state.recorder || state.recorder.state !== "inactive") {
+      return;
+    }
+    try {
+      state.recorder.start();
+      scheduleSegmentStop();
+      setStatus("Recording audio chunk...");
+    } catch (error) {
+      setStatus(`Recorder start failed: ${error.message || "Unknown error."}`);
+    }
+  }
+
+  function scheduleSegmentStop() {
+    clearSegmentTimer();
+    state.segmentTimerId = window.setTimeout(() => {
+      state.segmentTimerId = null;
+      if (!state.isSessionRunning || !state.recorder || state.recorder.state !== "recording") {
+        return;
+      }
+      try {
+        state.recorder.stop();
+      } catch {
+        // Best-effort segment boundary.
+      }
+    }, CHUNK_DURATION_MS);
+  }
+
+  function clearSegmentTimer() {
+    if (state.segmentTimerId !== null) {
+      window.clearTimeout(state.segmentTimerId);
+      state.segmentTimerId = null;
+    }
   }
 
   function unbindVideoStateListeners(video) {
@@ -441,6 +501,7 @@
   function stopSession() {
     state.isSessionRunning = false;
     state.chunkQueue = [];
+    clearSegmentTimer();
 
     if (state.recorder) {
       try {
@@ -452,6 +513,10 @@
       }
       state.recorder = null;
     }
+    stopStreamTracks(state.audioStream);
+    stopStreamTracks(state.capturedStream);
+    state.audioStream = null;
+    state.capturedStream = null;
 
     if (state.activeVideo) {
       unbindVideoStateListeners(state.activeVideo);
@@ -463,6 +528,19 @@
     state.shouldPromptAgain = true;
 
     detectAndHandleVideos();
+  }
+
+  function stopStreamTracks(stream) {
+    if (!stream) {
+      return;
+    }
+    for (const track of stream.getTracks()) {
+      try {
+        track.stop();
+      } catch {
+        // Best-effort cleanup.
+      }
+    }
   }
 
   function formatTimestamp(seconds) {
